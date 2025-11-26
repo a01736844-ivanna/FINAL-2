@@ -483,10 +483,20 @@ if tipo_reg == "Regresión logística":
                     cc3.metric("F1 Score (0)", f"{f1_0:.3f}")
 
                     # ---------------- Matriz de confusión ----------------
+                    cm = confusion_matrix(y_test, y_pred)
+
+                    tn, fp, fn, tp = cm.ravel()
+
+                    # Reordenamos para que quede como en tu diagrama:
+                    # [[TP, FP],
+                    #  [FN, TN]]
+                    cm_display = np.array([[tp, fp],
+                                        [fn, tn]])
+
                     cm_df = pd.DataFrame(
-                        cm,
-                        index=["Real 0 (barato)", "Real 1 (caro)"],
-                        columns=["Pred 0", "Pred 1"]
+                        cm_display,
+                        index=["Pred 1 (caro)", "Pred 0 (barato)"],   # filas = predicción
+                        columns=["Real 1 (caro)", "Real 0 (barato)"]  # columnas = realidad
                     )
 
                     fig_cm = px.imshow(
@@ -495,8 +505,10 @@ if tipo_reg == "Regresión logística":
                         aspect="auto",
                         color_continuous_scale=["#DEDEDE", "#FFB3B3", "#FF5A5F", "#00999F"],
                     )
+
                     fig_cm.update_layout(
                         title="Matriz de confusión",
                         margin=dict(l=10, r=10, t=40, b=10),
                     )
+
                     st.plotly_chart(fig_cm, use_container_width=True)
