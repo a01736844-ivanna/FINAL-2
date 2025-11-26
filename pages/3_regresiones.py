@@ -358,40 +358,27 @@ if tipo_reg == "Regresión no lineal":
 
 
 
-
-
 # ===================== REGRESIÓN LOGÍSTICA =====================
 if tipo_reg == "Regresión logística":
     st.markdown("## Regresión logística")
 
-    # Tomamos una ciudad de referencia solo para saber qué columnas existen
     ciudad_ref = ciudades_reg_sel[0]
     df_ref = dfs_ciudades[ciudad_ref]
 
-    # Asegurar que exista price
     if "price" not in df_ref.columns:
         st.warning("No se puede hacer regresión logística: falta columna 'price'.")
     else:
 
-        # --------- Variables numéricas + host_is_superhost ----------
         posibles_vars = [
-            "accommodates",
-            "bedrooms",
-            "bathrooms",
-            "minimum_nights",
-            "availability_365",
-            "number_of_reviews",
-            "estimated_occupancy_l365d",
-            "estimated_revenue_l365d",
-            "review_scores_rating",
-            "reviews_per_month",
-            "host_is_superhost"    # 🔥 AGREGADA AQUÍ
+            "accommodates", "bedrooms", "bathrooms",
+            "minimum_nights", "availability_365",
+            "number_of_reviews", "estimated_occupancy_l365d",
+            "estimated_revenue_l365d", "review_scores_rating",
+            "reviews_per_month", "host_is_superhost"
         ]
 
-        # Filtrar solo las que existan
         vars_disponibles = [v for v in posibles_vars if v in df_ref.columns]
 
-        # Selector para predictores (como pclass, age, fare en Titanic)
         predictores_log = st.sidebar.multiselect(
             "Variables explicativas (logística)",
             options=vars_disponibles,
@@ -400,14 +387,14 @@ if tipo_reg == "Regresión logística":
         )
 
         if len(predictores_log) == 0:
-            st.info("Selecciona al menos una variable explicativa para la regresión logística.")
+            st.info("Selecciona al menos una variable explicativa.")
         else:
 
-            # Hasta 4 ciudades por fila
             n = len(ciudades_reg_sel)
             cols_log = st.columns(min(4, n))
 
             for i, ciudad in enumerate(ciudades_reg_sel):
+
                 if i > 0 and i % 4 == 0:
                     cols_log = st.columns(min(4, n - i))
 
@@ -417,78 +404,83 @@ if tipo_reg == "Regresión logística":
                     df_city = dfs_ciudades[ciudad].copy()
 
                     if "price" not in df_city.columns:
-                        st.info("Falta 'price' en esta ciudad.")
+                        st.info("Falta price.")
                         continue
 
-                    # ---------------- Conversión host_is_superhost → binaria ----------------
+                    # ---- host_is_superhost → binario ----
                     if "host_is_superhost" in df_city.columns:
-                        mapa_super = {
-                            "t": 1, "f": 0,
-                            "T": 1, "F": 0,
-                            "True": 1, "False": 0,
-                            True: 1, False: 0
-                        }
+                        mapa = {"t":1,"f":0,"T":1,"F":0,"True":1,"False":0,True:1,False:0}
                         df_city["host_is_superhost_bin"] = (
-                            df_city["host_is_superhost"].map(mapa_super).fillna(0).astype(int)
+                            df_city["host_is_superhost"].map(mapa).fillna(0).astype(int)
                         )
-
-                        # Si el usuario eligió host_is_superhost, reemplazamos por la variable binaria:
-                        predictores_uso = []
-                        for p in predictores_log:
-                            if p == "host_is_superhost":
-                                predictores_uso.append("host_is_superhost_bin")
-                            else:
-                                predictores_uso.append(p)
+                        predictores_uso = [
+                            "host_is_superhost_bin" if p == "host_is_superhost" else p
+                            for p in predictores_log
+                        ]
                     else:
                         predictores_uso = predictores_log
 
-                    # ---------------- Variable objetivo (high_price) ----------------
+                    # ---- Target ----
                     umbral_local = df_city["price"].median()
                     df_city["high_price"] = (df_city["price"] > umbral_local).astype(int)
 
-                    # Limpiar dataset para X y y
-                    cols_necesarias = predictores_uso + ["high_price"]
-                    df_city = df_city[cols_necesarias].dropna()
+                    cols_needed = predictores_uso + ["high_price"]
+                    df_city = df_city[cols_needed].dropna()
 
                     if df_city.empty:
-                        st.info("Datos insuficientes después de limpiar NaN.")
+                        st.info("Datos insuficientes.")
                         continue
 
-                    X = df_city[predictores_uso].to_numpy(dtype=float)
-                    y = df_city["high_price"].to_numpy(dtype=int)
+                    X = df_city[predictores_uso].astype(float).values
+                    y = df_city["high_price"].values
 
                     if y.sum() == 0 or y.sum() == len(y):
-                        st.info("La variable objetivo tiene solo una clase en esta ciudad.")
+                        st.info("Solo una clase presente.")
                         continue
 
-                    # ---------------- Train-test split ----------------
                     X_train, X_test, y_train, y_test = train_test_split(
-                        X, y, test_size=0.3, random_state=None
+                        X, y, test_size=0.3, random_state=42
                     )
 
-                    # ---------------- Escalamiento (StandardScaler) ----------------
-                    escalar = StandardScaler()
-                    X_train = escalar.fit_transform(X_train)
-                    X_test = escalar.transform(X_test)
+                    scaler = StandardScaler()
+                    X_train = scaler.fit_transform(X_train)
+                    X_test = scaler.transform(X_test)
 
-                    # ---------------- Modelo Logístico ----------------
-                    modelo_log = LogisticRegression(max_iter=1000)
-                    modelo_log.fit(X_train, y_train)
-                    y_pred = modelo_log.predict(X_test)
+                    modelo = LogisticRegression(max_iter=1200)
+                    modelo.fit(X_train, y_train)
+                    y_pred = modelo.predict(X_test)
 
                     # ---------------- Métricas ----------------
-                   
                     cm = confusion_matrix(y_test, y_pred)
-                    acc = accuracy_score(y_test, y_pred)
-                    prec = precision_score(y_test, y_pred, zero_division=0)
-                    rec = recall_score(y_test, y_pred, zero_division=0)
-                    f1 = f1_score(y_test, y_pred, zero_division=0)
 
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Accuracy", f"{acc:.3f}")
-                    m2.metric("Precision (1)", f"{prec:.3f}")
-                    m3.metric("Recall (1)", f"{rec:.3f}")
-                    m4.metric("F1 Score", f"{f1:.3f}")
+                    acc = accuracy_score(y_test, y_pred)
+
+                    prec_1 = precision_score(y_test, y_pred, pos_label=1, zero_division=0)
+                    rec_1 = recall_score(y_test, y_pred, pos_label=1, zero_division=0)
+                    f1_1 = f1_score(y_test, y_pred, pos_label=1, zero_division=0)
+
+                    prec_0 = precision_score(y_test, y_pred, pos_label=0, zero_division=0)
+                    rec_0 = recall_score(y_test, y_pred, pos_label=0, zero_division=0)
+                    f1_0 = f1_score(y_test, y_pred, pos_label=0, zero_division=0)
+
+                    # ---- Layout en dos filas alineadas ----
+                    st.markdown("### Métricas")
+
+                    st.metric("Accuracy", f"{acc:.3f}")
+
+                    st.markdown("---") 
+
+                    # FILA 1: clase 1
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Precision (1)", f"{prec_1:.3f}")
+                    c2.metric("Recall (1)", f"{rec_1:.3f}")
+                    c3.metric("F1 Score (1)", f"{f1_1:.3f}")
+
+                    # FILA 2: clase 0 (DEBAJO EXACTO de los anteriores)
+                    cc1, cc2, cc3 = st.columns(3)
+                    cc1.metric("Precision (0)", f"{prec_0:.3f}")
+                    cc2.metric("Recall (0)", f"{rec_0:.3f}")
+                    cc3.metric("F1 Score (0)", f"{f1_0:.3f}")
 
                     # ---------------- Matriz de confusión ----------------
                     cm_df = pd.DataFrame(
